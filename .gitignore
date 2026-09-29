@@ -1,0 +1,58 @@
+# =====================================================================
+# Git Ignore Configuration
+# Project: Brazilian E-Commerce (Olist) Sales & Customer Intelligence
+# Author: Mohd Hamza Shaikh
+# =====================================================================
+
+# 1. Environment variables & credentials (CRITICAL: Never commit secrets)
+.env
+.env.*
+!.env.sample
+
+# 2. Raw datasets & heavy data files (Download from Kaggle / Generate locally)
+/data
+data/raw/
+data/processed/
+*.csv
+*.parquet
+
+# 3. Python bytecode & cache
+__pycache__/
+*.py[oc]
+*.pyo
+*.pyd
+build/
+dist/
+wheels/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+*.bak
+
+# 4. Jupyter Notebook checkpoints & autosaves
+.ipynb_checkpoints/
+
+# 5. Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# 6. IDEs & Editors
+.idea/
+.vscode/
+/shelf/
+/workspace.xml
+/httpRequests/
+.flake8
+
+# 7. Local TLS / SSL Certificates
+certs/
+*.pem
+*.key
+*.crt
+
+# 8. Operating System files
+.DS_Store
+Thumbs.db
+desktop.ini

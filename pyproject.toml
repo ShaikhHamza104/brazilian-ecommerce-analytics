@@ -1,0 +1,37 @@
+[project]
+name = "e-commerce-sales-analysis"
+version = "0.1.0"
+description = "End-to-End Brazilian E-Commerce (Olist) Sales & Customer Intelligence Platform"
+readme = "README.md"
+authors = [
+    { name = "Mohd Hamza Shaikh", email = "kmohdhamza10@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "ipykernel>=7.3.0",
+    "mysql-connector>=2.2.9",
+    "pandas>=3.0.6",
+    "pyarrow>=25.0.1",
+    "pymysql>=1.2.3",
+    "python-dotenv>=1.2.3",
+    "sqlalchemy>=2.0.54",
+    "unidecode>=1.4.0",
+]
+
+[project.scripts]
+e-commerce-sales-analysis = "e_commerce_sales_analysis:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.pyright]
+extraPaths = ["."]
