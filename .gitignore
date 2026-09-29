@@ -56,3 +56,6 @@ certs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# 9. Personal internal notes & audit files
+*technical_audit*.md
