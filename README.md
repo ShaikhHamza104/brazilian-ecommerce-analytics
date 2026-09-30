@@ -16,16 +16,17 @@
 ## 📌 Key Findings
 
 - **Marketplace Scale & Black Friday Peak:** Analyzed 99,441 orders spanning September 2016 through October 2018 (generating R$ 13.59M in merchandise GMV, or R$ 15.74M including freight). Monthly order volume surged to a peak of 7,421 non-canceled orders (R$ 1.17M GMV) during the November 2017 Black Friday event (+53.3% MoM growth).
-- **Repeat Buyer Economics vs. AOV:** Across non-canceled orders, repeat customers represented 3.06% of unique buyers (2,924 of 95,560) and 5.69% of total revenue (R$ 894,841.92). Their Average Order Value (AOV) was **R$ 144.80**, slightly lower than one-time buyers (**R$ 160.23**). Their cumulative spend was naturally higher (**R$ 306.03** vs. **R$ 160.23**) purely because they accumulated purchases across an average of 2.11 orders.
+- **Repeat Buyer Economics vs. AOV:** Across revenue orders (excluding canceled & unavailable), repeat customers represented 3.04% of unique buyers (2,888 of 94,990) and 5.66% of GMV revenue (R$ 890,258.50). Their Average Order Value (AOV) was **R$ 145.82**, slightly lower than one-time buyers (**R$ 161.18**). Their cumulative spend was naturally higher (**R$ 308.26** vs. **R$ 161.18**) purely because they accumulated purchases across an average of 2.11 orders.
 - **"Leaky Bucket" Cohort Retention:** Month 1 customer retention remained below 0.60% across all monthly cohorts (averaging ~0.45%), indicating a transactional marketplace driven by one-off customer acquisition rather than recurring habitual purchases.
 - **Logistics Disparity ("The Two Brazils"):** Delivery transit times averaged 8.7 days in São Paulo (`SP`) with a 5.89% delay rate and R$ 17.33 average freight. In contrast, northern states like Roraima (`RR`) averaged 29.3 days in transit with R$ 48.34 average freight (~2.8× higher), where shipping consumed over 32% of total order value.
-- **Merchant Concentration:** Seller revenue roughly follows a Pareto pattern: the top 17.65% of merchants (544 sellers) drove 79.83% of total platform GMV (R$ 10.85M), while the top 20% of sellers (619 merchants) generated 82.69% of GMV.
+- **Merchant Concentration:** Merchandise price revenue (`SUM(price)`) across 3,053 active sellers on revenue orders roughly follows a Pareto pattern: the top 17.65% of active merchants (539 sellers across Tiers 1–3) drove 79.99% of platform merchandise price revenue (R$ 10.84M), while the top 18 elite sellers (0.59%) alone generated 19.89% (R$ 2.70M).
 
 ---
 
 ## 📖 Table of Contents
 - [Project Overview & Origin](#-project-overview--origin)
 - [Key Findings](#-key-findings)
+- [Core Definitions & Accounting Logic](#-core-definitions--accounting-logic)
 - [Data Limitations](#-data-period--limitations)
 - [Advanced Data Integrity & Edge-Case Preservations](#-advanced-data-integrity--edge-case-preservations)
 - [Architectural Pipeline & Star Schema](#-architectural-pipeline--star-schema)
@@ -55,11 +56,44 @@ While standard course projects often conclude after basic descriptive statistics
 In commercial environments, an impactful Data Analyst must understand the operational context behind the numbers. Real-world transactional datasets contain subtle domain nuances: in-flight orders, customer account tokens versus individual shoppers, geographic logistics divides, and platform merchant risks.
 
 I expanded this project across five analytical dimensions:
-1. **Critical Edge-Case Auditing:** Investigated real-world domain nuances that standard pipelines overlook, successfully preserving **2,965 non-delivered operational order records**, **23,000+ early-delivery items**, and **2,924 repeat buyers (R$ 895K in revenue)**.
+1. **Critical Edge-Case Auditing:** Investigated real-world domain nuances that standard pipelines overlook, successfully preserving **2,957 non-delivered operational order records**, **23,000 early-delivery items**, and **2,888 repeat buyers (R$ 890K in GMV revenue)**.
 2. **Modular Analytics Engineering:** Refactored one-off scripts into an installable Python package (`src/e_commerce_sales_analysis`) with connection pooling, automated chunked ingestion, Portuguese text normalization (`unidecode`), and a 23-test automated test suite (`pytest`) with CI integration.
 3. **Advanced SQL Analytical Views & Queries (MySQL 8.0):** Engineered analytical views and standalone analytics scripts leveraging **Common Table Expressions (CTEs)**, **Window Functions (`ROW_NUMBER()`, `SUM() OVER ()`, `LAG()`)**, and conditional classification (`CASE WHEN`).
 4. **Customer & Merchant Diagnostics:** Built 6-month monthly cohort retention matrices, mapped the regional logistics divide, and quantified seller revenue concentration across 3,095 active merchants.
 5. **Columnar Star Schema for BI:** Transformed relational tables into an optimized dimensional model exported to columnar **Parquet** files (`dim_*` and `fact_*`), eliminating Cartesian join risks and preparing the data for reporting.
+
+---
+
+## 📐 Core Definitions & Accounting Logic
+
+To establish strict analytical rigor, all metrics in this repository adhere to verified domain definitions:
+
+1. **Cleaned Base Orders (`base` = 99,435 orders):**
+   - Source table `olist_orders` contains 99,441 raw records.
+   - Exactly **6 corrupted records** were identified and dropped: orders marked with status `'canceled'` that simultaneously possess a populated `order_delivered_customer_date` timestamp (an impossible logistics transition).
+   - All other 99,435 orders across all 8 lifecycle statuses are preserved (96,478 delivered + 2,957 non-delivered operational orders: 1,107 shipped, 619 canceled, 609 unavailable, 314 invoiced, 301 processing, 5 created, 2 approved).
+
+2. **Revenue Orders (`is_revenue_order` = 98,207 orders):**
+   - Defined as orders where `order_status NOT IN ('canceled', 'unavailable')` (`REVENUE_EXCLUDED_STATUSES = ['canceled', 'unavailable']`).
+   - Of the 99,435 cleaned base orders, **98,207 are revenue orders** and **1,228 are excluded non-revenue orders** (619 canceled + 609 unavailable).
+
+3. **Revenue vs. Total Payments (Price Revenue ≠ Payment Total):**
+   - **Merchandise Price Revenue = R$ 13,494,400.74:** `SUM(price)` from `fact_sales_items` for revenue orders (`is_revenue_order = True`, 112,101 items). Across all cleaned orders (including canceled and unavailable), total item price is R$ 13,590,997.52.
+   - **Order Gross Merchandise Value (GMV with Freight) = R$ 15,735,527.03:** `SUM(price + freight_value)` from `fact_sales_items` for revenue orders.
+   - **Total Payments = R$ 15,739,137.01 (Revenue Orders) / R$ 16,008,123.54 (All Orders):** `SUM(payment_total)` from `dim_orders` or `SUM(payment_value)` from `fact_order_payments`.
+   - **Crucial Accounting Distinction:** `payment_total` does **not** equal merchandise price revenue. Payment records reflect total customer checkout charges (item prices + freight shipping charges + customer installment financing/interest) across payment channels (credit card, boleto, voucher, debit card).
+
+4. **Repeat Buyer Definition (`customer_unique_id` vs. Account Gap):**
+   - **Repeat Buyers = 2,888 individuals** (3.04% of 94,990 unique buyers on revenue orders) who placed **6,105 orders**, generating **3,217 repeat purchase events** beyond their first order.
+   - **Account Gap Distinction:** The raw difference in `olist_customers` between `customer_id` (99,441 transaction tokens) and `customer_unique_id` (96,096 unique individuals) is **3,345 records**. That 3,345 number is an uncleaned account-level token artifact spanning all raw orders (including canceled and unavailable). True repeat buyer economics must be calculated on revenue orders using `customer_unique_id`.
+
+5. **Star Schema Data Grains:**
+   - **Order Grain (`dim_orders.parquet`):** Exactly 1 row per order (`order_id`, 99,435 rows, ~14.8 MB). Slimmed to core lifecycle attributes, payment summaries, and audit/revenue flags (`has_items`, `has_payment`, `is_revenue_order`). Heavy review comment text and redundant customer geography were eliminated.
+   - **Item Fact Grain (`fact_sales_items.parquet`):** Exactly 1 row per line item sequence within an order `(order_id, order_item_id)` (112,643 rows, ~9.5 MB). Contains pricing, shipping deadline validity flag (`is_shipping_limit_valid`), and joined product and seller dimensions. Excludes payment values to prevent Cartesian duplication.
+   - **Payment Fact Grain (`fact_order_payments.parquet`):** Exactly 1 row per payment transaction / installment sequence `(order_id, payment_sequential)` (103,880 rows, ~4.5 MB). Preserves installment counts and individual payment types.
+
+6. **SQL Layer vs. Parquet/BI Layer Reconciliation Note:**
+   - The SQL layer (views and `sql/analytics`) runs on raw MySQL data (**112,650 items, R$ 13,591,643.70**), whereas the Parquet star schema and Power BI model run on cleaned base orders (**112,643 items, R$ 13,590,997.52**) because 6 corrupt canceled-with-delivery orders (**7 items, R$ 646.18**) are dropped during base cleaning to maintain delivery lifecycle integrity.
 
 ---
 
@@ -81,9 +115,9 @@ During the exploratory data analysis phase, I audited data cleaning assumptions 
 
 | # | Domain Nuance & Edge Case | Standard / Baseline Handling | Modular Pipeline Solution & Value Preserved |
 |---|---|---|---|
-| **1** | **Customer Account vs. Unique Individual** | Using `customer_id` for both transactions and customer counting. | Differentiated `customer_id` (transaction token) from `customer_unique_id` (actual human buyer). Identified all **3,345 repeat purchase events** across **2,924 repeat buyers** (non-canceled orders), revealing that repeat buyers averaged **R$ 144.80** per order (AOV) and **R$ 306.03** in cumulative lifetime spend, compared to **R$ 160.23** for one-time buyers. |
-| **2** | **In-Flight & Canceled Shipments** | Naive date subtraction (`delivery - purchase >= 0`), which inadvertently drops rows where delivery date is `NULL`. | Scoped date integrity validation conditionally to `delivered` status only. Preserved **2,965 in-flight and non-delivered orders**, retaining full operational visibility into order cancellations, processing lag, and active shipments. |
-| **3** | **Early Carrier Fulfillment** | Filtering out items where `shipping_limit_date < delivery_date` under the assumption of an invalid sequence. | Recognized that packages delivered *before* the seller dispatch deadline represent exceptional logistics performance. Preserved **23,000+ line items**. |
+| **1** | **Customer Account vs. Unique Individual** | Using `customer_id` for both transactions and customer counting. | Differentiated `customer_id` (transaction token) from `customer_unique_id` (actual human buyer). Identified all **3,217 repeat purchase events** across **2,888 repeat buyers** on revenue orders (distinguished from the raw 3,345 account gap in uncleaned data), revealing that repeat buyers averaged **R$ 145.82** per order (AOV) and **R$ 308.26** in cumulative lifetime spend, compared to **R$ 161.18** for one-time buyers. |
+| **2** | **In-Flight & Canceled Shipments** | Naive date subtraction (`delivery - purchase >= 0`), which inadvertently drops rows where delivery date is `NULL`. | Scoped date integrity validation conditionally to `delivered` status only. Preserved **2,957 in-flight and non-delivered orders**, retaining full operational visibility into order cancellations, processing lag, and active shipments. |
+| **3** | **Early Carrier Fulfillment** | Filtering out items where `shipping_limit_date < delivery_date` under the assumption of an invalid sequence. | Recognized that packages delivered *before* the seller dispatch deadline represent exceptional logistics performance. Preserved **23,000 line items**. |
 | **4** | **Financial Granularity (Items vs. Payments)** | Merging payments (1:M) and order items (1:N) directly into a single flat denormalized table. | Preserved accounting integrity by designing a **Star Schema** with separate Fact tables for Items and Payments, preventing Cartesian join inflation that artificially doubles revenue (verified via order `03ecec245220b63fd7f68c1737ba99ba`). |
 
 ---
@@ -110,7 +144,7 @@ flowchart TD
     end
 
     subgraph Presentation & Modeling [Downstream Layer]
-        PARQUET["data/processed/\n(8 Star Schema Columnar Parquet Files)"]
+        PARQUET["data/processed/\n(7 Star Schema Columnar Parquet Files)"]
         BI["Power BI Dashboards\n(Sales, Logistics & Customer Intelligence)"]
     end
 
@@ -136,9 +170,8 @@ The complete 9-table relational schema is verified with proper Crow's Foot cardi
 ```
 
 ### Processed Analytical Star Schema (`data/processed/`)
-- **Dimension Tables:** `dim_customers.parquet`, `dim_products.parquet`, `dim_sellers.parquet`, `dim_orders.parquet`, `dim_order_reviews.parquet`
-- **Fact Tables:** `fact_order_items.parquet` (Grain: 1 row per product sold), `fact_order_payments.parquet` (Grain: 1 row per payment installment)
-- **Analytical Master:** `olist_master_cleaned.parquet` (Unified line-item dataset for quick feature analysis)
+- **Dimension Tables:** `dim_orders.parquet` (Grain: 1 row per order, 99,435 rows), `dim_customers.parquet`, `dim_products.parquet`, `dim_sellers.parquet`, `dim_order_reviews.parquet`
+- **Fact Tables:** `fact_sales_items.parquet` (Grain: 1 row per line item sold, 112,643 rows with products and sellers joined), `fact_order_payments.parquet` (Grain: 1 row per payment installment/sequence)
 
 ---
 
@@ -146,7 +179,7 @@ The complete 9-table relational schema is verified with proper Crow's Foot cardi
 
 ### 1. Analytical Database Views (`sql/views/`)
 - **[`vw_order_fulfillment.sql`](file:///d:/E-commerce%20Sales%20Analysis/sql/views/vw_order_fulfillment.sql):** Computes actual vs. estimated delivery duration, delay variance, and on-time delivery classification.
-- **[`vw_customer_rfm.sql`](file:///d:/E-commerce%20Sales%20Analysis/sql/views/vw_customer_rfm.sql):** Recency calculated against a fixed dataset snapshot date (`2018-10-18`, max purchase timestamp + 1 day), Frequency, and Monetary aggregation with loyalty tier tagging.
+- **[`vw_customer_rfm.sql`](file:///d:/E-commerce%20Sales%20Analysis/sql/views/vw_customer_rfm.sql):** Recency calculated against a fixed dataset snapshot date (`2018-10-18`, max purchase timestamp + 1 day), Frequency, and Monetary aggregation with loyalty tier tagging (scoped to revenue orders with exactly 1 row per `customer_unique_id`: 94,990 unique customers, 2,888 repeat buyers).
 - **[`vw_sales_master.sql`](file:///d:/E-commerce%20Sales%20Analysis/sql/views/vw_sales_master.sql):** Unified line-item transaction view classifying routes (`Same State` vs. `Inter-State`) and joining seller/customer geography with review ratings.
 
 ### 2. Deep-Dive Business Queries (`sql/analytics/`)
@@ -163,9 +196,9 @@ The complete 9-table relational schema is verified with proper Crow's Foot cardi
 All metrics below are computed from the historical sample (September 2016 to October 2018).
 
 ### 1. Customer Loyalty & Repeat Buyer Economics
-- **One-Time Shoppers (92,636 customers):** Placed 92,636 orders generating **R$ 14,842,825.60** (94.31% of revenue), with an Average Order Value (AOV) of **R$ 160.23**.
-- **Repeat Buyers (2,924 customers):** Placed 6,180 orders generating **R$ 894,841.92** (5.69% of revenue), with an Average Order Value of **R$ 144.80** and an average cumulative lifetime spend of **R$ 306.03** across ~2.11 orders.
-- **Framing Note:** While lifetime spend per customer was naturally higher for repeat buyers (+91.0%) due to placing multiple orders, their spend per individual order (AOV) was slightly lower (-9.6%) than one-time buyers. Repeat buyers generated 5.69% of total platform revenue.
+- **One-Time Shoppers (92,102 customers):** Placed 92,102 orders generating **R$ 14,845,268.53** (94.34% of GMV), with an Average Order Value (AOV) of **R$ 161.18** (or R$ 138.37 merchandise price AOV).
+- **Repeat Buyers (2,888 customers):** Placed 6,105 orders generating **R$ 890,258.50** (5.66% of GMV), with an Average Order Value of **R$ 145.82** (or R$ 122.93 merchandise price AOV) and an average cumulative lifetime spend of **R$ 308.26** across ~2.11 orders.
+- **Framing Note:** While lifetime spend per customer was naturally higher for repeat buyers (+91.3%) due to placing multiple orders, their spend per individual order (AOV) was slightly lower (-9.5%) than one-time buyers. Repeat buyers generated 5.66% of total platform GMV (and 5.56% of merchandise price revenue).
 
 ### 2. The "Leaky Bucket" Cohort Retention Reality
 - **Month 1 Retention:** Remained below **0.60% across all monthly cohorts** (averaging ~0.45%).
@@ -176,12 +209,14 @@ All metrics below are computed from the historical sample (September 2016 to Oct
 - **The Freight Disparity:** Customers in northern states paid nearly **3× more in freight** (averaging R$ 48.34 in `RR` vs R$ 17.33 in `SP`), with shipping making up over **32% of total order cost**.
 - **Customer Satisfaction Impact:** Alagoas (`AL`) experienced a **23.93% late delivery rate**, dragging customer review scores down to **3.85 / 5.0**.
 
-### 4. Merchant Concentration (Pareto Distribution)
-- **Top 18 Elite Sellers (0.58% of sellers):** Generated **19.81% of total GMV (R$ 2.69M)**, averaging **R$ 149,575/seller**.
-- **Top 128 Core Sellers (4.14% of sellers):** Drove **49.75% of total GMV (R$ 6.76M)**.
-- **Top 539 Sellers (17.42% of sellers):** Drove **79.83% of total GMV (R$ 10.85M)** — roughly following a Pareto pattern where ~17.4% of sellers drove ~80% of volume.
-- **Overall Top 20% Concentration:** The top 20% of merchants (619 sellers) generated **82.69% of total GMV**.
-- **Fulfillment Discipline:** Elite merchants maintained a late dispatch rate of **7.84%**, compared to **11.42%** among the 2,514 long-tail merchants.
+### 4. Merchant Concentration (Pareto Distribution on Merchandise Price Revenue)
+*Base: Merchandise price revenue (`SUM(price)`) on revenue orders across 3,053 active merchants.*
+- **Tier 1 (Top 20% Revenue / Elite - 18 sellers, 0.59% of active sellers):** Generated **R$ 2,695,340.57** (19.89% of revenue), averaging **R$ 149,741.14/seller** with 3.4 days dispatch, 7.84% late dispatch, and 4.04 review score.
+- **Tier 2 (Next 30% Revenue / Core - 110 sellers, 3.60% of active sellers):** Generated **R$ 4,080,395.82**, averaging **R$ 37,094.51/seller** with 3.5 days dispatch, 9.76% late dispatch, and 4.02 review score.
+- **Tier 3 (Next 30% Revenue / Growing - 411 sellers, 13.46% of active sellers):** Generated **R$ 4,066,618.80**, averaging **R$ 9,894.45/seller** with 3.6 days dispatch, 10.76% late dispatch, and 4.06 review score.
+- **Top 539 Merchants (Tiers 1–3 combined, 17.65% of active sellers):** Generated **R$ 10,842,355.19 (79.99% of total platform merchandise price revenue)** — demonstrating that ~17.7% of active merchants drive ~80% of sales.
+- **Tier 4 (Long Tail - 2,514 sellers, 82.35% of active sellers):** Generated **R$ 2,711,840.12** (20.01% of revenue), averaging **R$ 1,078.70/seller** with 3.7 days dispatch and 11.42% late dispatch.
+- **Fulfillment Discipline:** Elite merchants maintained lower late dispatch rates (**7.84%** vs. **11.42%** for long-tail merchants), demonstrating operational consistency at scale.
 
 ---
 
@@ -194,7 +229,7 @@ brazilian-ecommerce-analytics/
 │       └── ci.yml             # GitHub Actions CI for flake8 & pytest
 ├── data/
 │   ├── raw/                   # 9 original source CSV datasets (from Kaggle)
-│   └── processed/             # 8 analytical Parquet files (Star Schema)
+│   └── processed/             # 7 analytical Parquet files (Star Schema)
 ├── docs/
 │   ├── diagrams/              # databaseschema.png (Verified Crow's Foot ERD)
 │   ├── olist_data_dictionary.pdf
@@ -251,7 +286,7 @@ Output:
 ```plaintext
 ============================= test session starts =============================
 platform win32 -- Python 3.11.16, pytest-9.1.1, pluggy-1.6.0
-rootdir: D:\E-commerce Sales Analysis
+rootdir: brazilian-ecommerce-analytics
 configfile: pyproject.toml
 collected 23 items / 13 deselected / 10 selected
 
@@ -329,20 +364,19 @@ uv run python script/export_to_mysql.py
 ```
 
 ### 5. Generate Analytical Star Schema (Parquet)
-Execute the data cleaning and star schema generation notebook to generate the 8 columnar Parquet tables in `data/processed/`:
+Execute the data cleaning and star schema generation notebook to generate the 7 columnar Parquet tables in `data/processed/`:
 ```bash
 uv run jupyter execute notebook/01_eda_and_cleaning.ipynb
 ```
 
 This outputs:
+- `dim_orders.parquet`
+- `fact_sales_items.parquet`
+- `fact_order_payments.parquet`
 - `dim_customers.parquet`
 - `dim_products.parquet`
 - `dim_sellers.parquet`
-- `dim_orders.parquet`
 - `dim_order_reviews.parquet`
-- `fact_order_items.parquet`
-- `fact_order_payments.parquet`
-- `olist_master_cleaned.parquet`
 
 ### 6. Run Analytics Queries
 Run any of the analytical queries directly in your SQL client or via Python:

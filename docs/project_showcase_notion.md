@@ -20,7 +20,7 @@ While standard course projects often conclude after basic descriptive KPIs and h
 In commercial e-commerce environments, a Data Analyst cannot merely follow a generic script. Real-world data contains domain edge cases: in-flight shipments, account-versus-individual identifiers, geographic delivery disparities, and merchant concentration risks. 
 
 I extended the project across five analytical dimensions:
-1. **Critical Edge-Case Auditing:** Investigated four vital domain nuances that standard pipelines overlook, successfully preserving **2,965 non-delivered operational order records**, **23,000+ early-delivery items**, and **2,924 repeat buyers (R$ 895K in revenue)**.
+1. **Critical Edge-Case Auditing:** Investigated four vital domain nuances that standard pipelines overlook, successfully preserving **2,957 non-delivered operational order records**, **23,000 early-delivery items**, and **2,888 repeat buyers (R$ 890K in GMV revenue)**.
 2. **Modular Analytics Engineering:** Refactored one-off scripts into an installable Python package (`src/e_commerce_sales_analysis`) with connection pooling, automated chunked ingestion, Portuguese text normalization (`unidecode`), and a 23-test automated test suite (`pytest`) with GitHub Actions CI.
 3. **Advanced SQL Analytical Views & Queries (MySQL 8.0):** Engineered analytical views and standalone analytics scripts leveraging **Common Table Expressions (CTEs)**, **Window Functions (`ROW_NUMBER()`, `SUM() OVER ()`, `LAG()`)**, and conditional classification (`CASE WHEN`).
 4. **Customer & Merchant Diagnostics:** Built 6-month monthly cohort retention matrices, mapped the regional logistics divide, and quantified seller revenue concentration across 3,095 active merchants.
@@ -34,9 +34,9 @@ During the exploratory data analysis phase, I audited data cleaning assumptions 
 
 | # | Domain Nuance & Edge Case | Standard / Baseline Handling | Modular Pipeline Solution & Value Preserved |
 |---|---|---|---|
-| **1** | **Customer Account vs. Unique Individual** | Using `customer_id` for both transactions and customer counting. | Differentiated `customer_id` (transaction token) from `customer_unique_id` (actual human buyer). Identified all **3,345 repeat purchase events** across **2,924 repeat buyers** (non-canceled orders), revealing that repeat buyers averaged **R$ 144.80** per order (AOV) and **R$ 306.03** in cumulative lifetime spend, compared to **R$ 160.23** for one-time buyers. |
-| **2** | **In-Flight & Canceled Shipments** | Naive date subtraction (`delivery - purchase >= 0`), which inadvertently drops rows where delivery date is `NULL`. | Scoped date integrity validation conditionally to `delivered` status only. Preserved **2,965 in-flight and non-delivered orders**, retaining full operational visibility into order cancellations, processing lag, and active shipments. |
-| **3** | **Early Carrier Fulfillment** | Filtering out items where `shipping_limit_date < delivery_date` under the assumption of an invalid sequence. | Recognized that packages delivered *before* the seller dispatch deadline represent exceptional logistics performance. Preserved **23,000+ line items**. |
+| **1** | **Customer Account vs. Unique Individual** | Using `customer_id` for both transactions and customer counting. | Differentiated `customer_id` (transaction token) from `customer_unique_id` (actual human buyer). Identified all **3,217 repeat purchase events** across **2,888 repeat buyers** on revenue orders (distinguished from the raw 3,345 account gap in uncleaned data), revealing that repeat buyers averaged **R$ 145.82** per order (AOV) and **R$ 308.26** in cumulative lifetime spend, compared to **R$ 161.18** for one-time buyers. |
+| **2** | **In-Flight & Canceled Shipments** | Naive date subtraction (`delivery - purchase >= 0`), which inadvertently drops rows where delivery date is `NULL`. | Scoped date integrity validation conditionally to `delivered` status only. Preserved **2,957 in-flight and non-delivered orders**, retaining full operational visibility into order cancellations, processing lag, and active shipments. |
+| **3** | **Early Carrier Fulfillment** | Filtering out items where `shipping_limit_date < delivery_date` under the assumption of an invalid sequence. | Recognized that packages delivered *before* the seller dispatch deadline represent exceptional logistics performance. Preserved **23,000 line items**. |
 | **4** | **Financial Granularity (Items vs. Payments)** | Merging payments (1:M) and order items (1:N) directly into a single flat denormalized table. | Preserved accounting integrity by designing a **Star Schema** with separate Fact tables for Items and Payments, preventing Cartesian join inflation that artificially doubles revenue (verified via order `03ecec245220b63fd7f68c1737ba99ba`). |
 
 ---
@@ -44,17 +44,17 @@ During the exploratory data analysis phase, I audited data cleaning assumptions 
 ## 💡 Key Business Insights & Analytical Findings
 
 ### 1. Customer RFM Segmentation & Repeat Buyer Economics (`vw_customer_rfm` & `05_repeat_buyer_aov.sql`)
-* **One-Time Shoppers (92,636 customers):** Generated **R$ 14,842,825.60** across 92,636 orders, with an Average Order Value (AOV) of **R$ 160.23**.
-* **Repeat Buyers (2,924 customers):** Generated **R$ 894,841.92** across 6,180 orders, with an Average Order Value of **R$ 144.80** and an average cumulative lifetime spend of **R$ 306.03** across ~2.11 orders.
-* **Analytical Framing:** While lifetime spend per customer was naturally higher for repeat buyers (+91.0%) due to placing multiple orders, their spend per individual order (AOV) was slightly lower (-9.6%) than one-time buyers. Repeat buyers represented 5.69% of total platform revenue.
+* **One-Time Shoppers (92,102 customers):** Generated **R$ 14,845,268.53** across 92,102 orders, with an Average Order Value (AOV) of **R$ 161.18** (or R$ 138.37 merchandise price AOV).
+* **Repeat Buyers (2,888 customers):** Generated **R$ 890,258.50** across 6,105 orders, with an Average Order Value of **R$ 145.82** (or R$ 122.93 merchandise price AOV) and an average cumulative lifetime spend of **R$ 308.26** across ~2.11 orders.
+* **Analytical Framing:** While lifetime spend per customer was naturally higher for repeat buyers (+91.3%) due to placing multiple orders, their spend per individual order (AOV) was slightly lower (-9.5%) than one-time buyers. Repeat buyers represented 5.66% of total platform GMV (and 5.56% of merchandise price revenue).
 
 ```
-Customer Loyalty Segment Breakdown (Non-Canceled Orders):
+Customer Loyalty Segment Breakdown (Revenue Orders):
 ┌─────────────────────────┬──────────────────┬─────────────┬─────────────┬────────────────────┬────────────────────┬────────────────┐
 │ Loyalty Segment         │ Total Customers  │ Total Orders│ Avg Orders  │ AOV (Order Level)  │ Avg Lifetime Spend │ Total Revenue  │
 ├─────────────────────────┼──────────────────┼─────────────┼─────────────┼────────────────────┼────────────────────┼────────────────┤
-│ One-Time Buyer          │ 92,636           │ 92,636      │ 1.00        │ R$ 160.23          │ R$ 160.23          │ R$ 14,842,825  │
-│ Repeat Buyer            │  2,924           │  6,180      │ 2.11        │ R$ 144.80          │ R$ 306.03          │ R$    894,842  │
+│ One-Time Buyer          │ 92,102           │ 92,102      │ 1.00        │ R$ 161.18          │ R$ 161.18          │ R$ 14,845,269  │
+│ Repeat Buyer            │  2,888           │  6,105      │ 2.11        │ R$ 145.82          │ R$ 308.26          │ R$    890,259  │
 └─────────────────────────┴──────────────────┴─────────────┴─────────────┴────────────────────┴────────────────────┴────────────────┘
 ```
 
@@ -90,17 +90,18 @@ Comparing logistics and customer satisfaction across Brazilian destination state
 * **The Rio Operational Outlier:** Despite bordering São Paulo, Rio de Janeiro (`RJ`) exhibited a high **13.5% delay rate** and a sub-4.0 review score (3.97), reflecting dense urban routing friction.
 
 ### 4. Merchant Concentration & Platform Health (`04_seller_performance_and_concentration.sql`)
-Applying window functions (`SUM() OVER (ORDER BY GMV DESC)`) revealed that merchant revenue roughly followed a Pareto pattern across 3,095 active sellers:
+Applying window functions (`SUM() OVER (ORDER BY total_revenue DESC)`) analyzed merchandise price revenue (`SUM(price)`) across 3,053 active sellers on revenue orders:
 
-| Seller Tier | Merchant Count | % of All Merchants | Tier Total GMV | Avg Revenue / Seller | Avg Dispatch Time | Late Dispatch % | Avg Review Score |
+| Seller Tier | Merchant Count | % of All Merchants | Tier Total Revenue | Avg Revenue / Seller | Avg Dispatch Time | Late Dispatch % | Avg Review Score |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Tier 1: Top 20% GMV (Elite)** | **18** | **0.58%** | **R$ 2,692,346** | **R$ 149,575** | 3.4 days | **7.84%** | 4.04 / 5 |
-| **Tier 2: Next 30% GMV (Core)** | **110** | **3.55%** | **R$ 4,069,417** | **R$ 36,995** | 3.5 days | 9.76% | 4.02 / 5 |
-| **Tier 3: Next 30% GMV (Growing)** | **411** | **13.28%** | **R$ 4,087,853** | **R$ 9,946** | 3.6 days | 10.76% | 4.06 / 5 |
-| **Tier 4: Long Tail (Remaining 20%)** | **2,556** | **82.59%** | **R$ 2,742,028** | **R$ 1,073** | 3.7 days | **11.42%** | 4.02 / 5 |
+| **Tier 1: Top 20 Pct Revenue (Elite)** | **18** | **0.59%** | **R$ 2,695,340.57** | **R$ 149,741.14** | 3.4 days | **7.84%** | 4.04 / 5 |
+| **Tier 2: Next 30 Pct Revenue (Core)** | **110** | **3.60%** | **R$ 4,080,395.82** | **R$ 37,094.51** | 3.5 days | 9.76% | 4.02 / 5 |
+| **Tier 3: Next 30 Pct Revenue (Growing)** | **411** | **13.46%** | **R$ 4,066,618.80** | **R$ 9,894.45** | 3.6 days | 10.76% | 4.06 / 5 |
+| **Tier 4: Long Tail (Remaining 20 Pct)** | **2,514** | **82.35%** | **R$ 2,711,840.12** | **R$ 1,078.70** | 3.7 days | **11.42%** | 4.02 / 5 |
 
-* **Concentration Profile:** 18 sellers (0.58%) generated 19.81% of GMV. Only 128 merchants (4.14%) controlled 49.75% of total platform sales.
-* **Pareto Pattern:** **17.42% of sellers (539 merchants)** generated **79.83% of total platform GMV (R$ 10.85M)**, and the top 20% of sellers accounted for 82.69% of GMV.
+* **Base Metric:** Scoped to merchandise price revenue (`SUM(price)`) across 3,053 active merchants on revenue orders.
+* **Concentration Profile:** 18 elite sellers (0.59%) generated R$ 2,695,340.57 (19.89% of revenue). Combining Tier 1 and Tier 2, 128 merchants (4.19%) controlled R$ 6,775,736.39 (49.99% of total merchandise price sales).
+* **Pareto Pattern:** The top 539 merchants (Tiers 1–3 combined, 17.65% of active sellers) generated **R$ 10,842,355.19 (79.99% of total platform merchandise price revenue)**.
 * **Fulfillment Discipline:** Elite sellers maintained lower late-dispatch rates (7.84% vs. 11.42% for long-tail sellers), showing that higher volume correlated with operational consistency.
 
 ---
@@ -124,9 +125,8 @@ Modeled 9 core tables in MySQL with strict primary keys and foreign key constrai
 
 ### Star Schema for Power BI
 To enable high-speed aggregation in BI tools and prevent Cartesian revenue inflation, the cleaned data was exported to columnar **Parquet** files:
-* **Dimension Tables:** `dim_customers.parquet`, `dim_products.parquet`, `dim_sellers.parquet`, `dim_orders.parquet`, `dim_order_reviews.parquet`
-* **Fact Tables:** `fact_order_items.parquet` (Grain: 1 row per product sold), `fact_order_payments.parquet` (Grain: 1 row per payment installment/method)
-* **Analytical Master:** `olist_master_cleaned.parquet` (Unified line-item dataset for quick EDA and reporting)
+* **Dimension Tables:** `dim_orders.parquet` (Grain: 1 row per order, 99,435 rows), `dim_customers.parquet`, `dim_products.parquet`, `dim_sellers.parquet`, `dim_order_reviews.parquet`
+* **Fact Tables:** `fact_sales_items.parquet` (Grain: 1 row per line item sold, 112,643 rows with products and sellers joined), `fact_order_payments.parquet` (Grain: 1 row per payment installment/method)
 
 ---
 
@@ -139,7 +139,7 @@ brazilian-ecommerce-analytics/
 │       └── ci.yml             # GitHub Actions CI for flake8 & pytest
 ├── data/
 │   ├── raw/                   # 9 original source CSV datasets (from Kaggle)
-│   └── processed/             # 8 analytical Parquet tables (Star Schema)
+│   └── processed/             # 7 analytical Parquet tables (Star Schema)
 ├── docs/
 │   ├── diagrams/              # databaseschema.png (Verified Crow's Foot ERD)
 │   ├── olist_data_dictionary.pdf
@@ -187,22 +187,22 @@ brazilian-ecommerce-analytics/
 > *I took ownership of the project by auditing edge cases, investigating how data filtering decisions impact business metrics, establishing clean code standards (automated pytest suite, connection pooling, modular Python architecture, CI workflow), and writing advanced SQL window functions for cohort retention, repeat buyer economics, and merchant Pareto concentration. It reflects my mindset: I master the fundamentals, think critically about the domain, and build reproducible analytics."*
 
 ### Q2: "What is your philosophy on handling missing values and data cleaning?"
-> *"My philosophy is that data cleaning must be driven by business domain logic, not coding convenience. For instance, when analyzing why orders lacked delivery timestamps, I recognized they were active in-flight or canceled orders—critical data for measuring cancellation rates and carrier lead times. By scoping validation conditionally rather than dropping nulls globally, I preserved 2,965 non-delivered orders, ensuring operational metrics remain reliable."*
+> *"My philosophy is that data cleaning must be driven by business domain logic, not coding convenience. For instance, when analyzing why orders lacked delivery timestamps, I recognized they were active in-flight or canceled orders—critical data for measuring cancellation rates and carrier lead times. By scoping validation conditionally rather than dropping nulls globally, I preserved 2,957 non-delivered orders, ensuring operational metrics remain reliable."*
 
 ### Q3: "How did you design the RFM analysis, and what strategic action would you recommend?"
-> *"I built a dedicated SQL view (`vw_customer_rfm`) that calculated Recency against a fixed dataset snapshot date (max purchase timestamp + 1 day) using a CTE, Frequency via distinct order counts, and Monetary value from item and freight totals. When breaking down order-level unit economics, repeat buyers actually spent slightly less per order (R$ 144.80 AOV) than one-time buyers (R$ 160.23 AOV), though their cumulative spend reached R$ 306.03 across ~2.11 orders. Repeat buyers accounted for 5.69% of platform revenue, suggesting marketing efforts should evaluate post-purchase onboarding campaigns to identify whether repeat purchase rates can be economically improved."*
+> *"I built a dedicated SQL view (`vw_customer_rfm`) that calculated Recency against a fixed dataset snapshot date (max purchase timestamp + 1 day) using a CTE, Frequency via distinct order counts, and Monetary value from item and freight totals. When breaking down order-level unit economics on revenue orders, repeat buyers actually spent slightly less per order (R$ 145.82 AOV) than one-time buyers (R$ 161.18 AOV), though their cumulative spend reached R$ 308.26 across ~2.11 orders. Repeat buyers accounted for 5.66% of platform GMV revenue, suggesting marketing efforts should evaluate post-purchase onboarding campaigns to identify whether repeat purchase rates can be economically improved."*
 
 ### Q4: "What did your cohort retention and seller concentration queries teach you about platform economics?"
 > *"Two critical strategic insights:*
 > *1. **The Leaky Bucket:** Month 1 cohort retention was under 0.60% (averaging ~0.45%), meaning Olist could not count on recurring LTV to justify expensive customer acquisition; first-order contribution margin had to cover acquisition costs.*
-> *2. **Merchant Concentration:** The seller Pareto analysis proved that ~17.4% of sellers drove ~80% of platform sales, and only 18 elite merchants generated 19.8% of GMV. Losing a handful of top merchants would severely impact revenue, making Key Account Management (KAM) retention programs an urgent platform priority."*
+> *2. **Merchant Concentration:** The seller Pareto analysis proved that ~17.7% of active sellers (539 merchants) drove ~80% of platform merchandise price sales, and 18 elite merchants generated 19.89% (R$ 2.70M). Losing a handful of top merchants would severely impact revenue, making Key Account Management (KAM) retention programs an urgent platform priority."*
 
 ---
 
 ## 📈 Completed Milestones & Roadmap
 - [x] Initial relational database schema and DDL definitions with foreign keys.
 - [x] Batch ingestion pipeline with chunking and CLI management.
-- [x] Comprehensive data cleaning pipeline in `notebook/01_eda_and_cleaning.ipynb` with 8 Parquet exports.
+- [x] Comprehensive data cleaning pipeline in `notebook/01_eda_and_cleaning.ipynb` with 7 Parquet exports.
 - [x] Automated test suite (23 tests: 10 non-DB unit tests, 13 DB smoke tests) with GitHub Actions CI.
 - [x] Analytical SQL views (`vw_order_fulfillment`, `vw_customer_rfm`, `vw_sales_master`).
 - [x] 5 Deep-dive analytics SQL queries (MoM growth, cohort retention, state logistics, seller Pareto, repeat buyer AOV).
