@@ -16,19 +16,32 @@
 -- 2. Customer-level Lifetime Spend (Total Revenue / Unique Customers)
 -- 3. Repeat buyer share of TOTAL marketplace revenue
 
-WITH order_summary AS (
+WITH excluded_statuses AS (
+    -- Revenue Excluded Statuses (aligns with REVENUE_EXCLUDED_STATUSES in Python pipeline)
+    SELECT 'canceled' AS status
+    UNION ALL
+    SELECT 'unavailable' AS status
+),
+base_orders AS (
+    -- Cleaned orders: filter out corrupt canceled-with-delivery orders
+    -- and non-revenue operational statuses
+    SELECT o.order_id, o.customer_id, o.order_status
+    FROM olist_orders o
+    WHERE NOT (o.order_status = 'canceled' AND o.order_delivered_customer_date IS NOT NULL)
+      AND o.order_status NOT IN (SELECT status FROM excluded_statuses)
+),
+order_summary AS (
     -- 1. Calculate revenue per order (item price + freight)
-    --    Scoped to non-canceled orders to reflect actual commercial activity
+    --    Scoped to revenue orders (excluding canceled & unavailable)
     SELECT 
         o.order_id,
         c.customer_unique_id,
         COALESCE(SUM(oi.price + oi.freight_value), 0) AS order_total_value
-    FROM olist_orders o
+    FROM base_orders o
     INNER JOIN olist_customers c 
         ON o.customer_id = c.customer_id
     LEFT JOIN olist_order_items oi 
         ON o.order_id = oi.order_id
-    WHERE o.order_status != 'canceled'
     GROUP BY o.order_id, c.customer_unique_id
 ),
 customer_order_frequency AS (
