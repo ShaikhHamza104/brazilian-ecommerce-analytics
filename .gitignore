@@ -44,7 +44,6 @@ ENV/
 /shelf/
 /workspace.xml
 /httpRequests/
-.flake8
 
 # 7. Local TLS / SSL Certificates
 certs/
