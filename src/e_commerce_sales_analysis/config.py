@@ -29,6 +29,7 @@ DB_PORT = int(os.getenv("DB_PORT", "3306"))
 DB_NAME = os.getenv("DB_NAME", "")
 DB_SSL_CA = os.getenv("DB_SSL_CA", "")
 
+
 def get_db_url() -> str:
     """Construct a safe MySQL SQLAlchemy connection URL with encoded credentials."""
     encoded_user = quote_plus(DB_USER)

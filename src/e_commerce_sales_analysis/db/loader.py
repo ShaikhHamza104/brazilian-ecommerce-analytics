@@ -8,6 +8,7 @@ from .connection import get_engine
 
 _VALID_TABLE_REGEX = re.compile(r"^[a-zA-Z0-9_]+$")
 
+
 def load_table(
     table_name: str,
     chunk_size: int = 50_000,
@@ -26,7 +27,8 @@ def load_table(
 
     if not _VALID_TABLE_REGEX.match(table_name):
         raise ValueError(
-            f"Invalid table name: '{table_name}'. Only alphanumeric characters and underscores allowed."
+            f"Invalid table name: '{table_name}'. "
+            "Only alphanumeric characters and underscores allowed."
         )
     if chunk_size <= 0:
         raise ValueError("chunk_size must be greater than zero.")

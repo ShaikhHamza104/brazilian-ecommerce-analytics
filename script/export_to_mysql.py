@@ -157,9 +157,12 @@ TABLE_CONFIGS: Sequence[TableConfig] = (
             price DECIMAL(10, 2) NULL,
             freight_value DECIMAL(10, 2) NULL,
             PRIMARY KEY (order_id, order_item_id),
-            CONSTRAINT fk_items_order FOREIGN KEY (order_id) REFERENCES olist_orders(order_id),
-            CONSTRAINT fk_items_product FOREIGN KEY (product_id) REFERENCES olist_products(product_id),
-            CONSTRAINT fk_items_seller FOREIGN KEY (seller_id) REFERENCES olist_sellers(seller_id)
+            CONSTRAINT fk_items_order
+                FOREIGN KEY (order_id) REFERENCES olist_orders(order_id),
+            CONSTRAINT fk_items_product
+                FOREIGN KEY (product_id) REFERENCES olist_products(product_id),
+            CONSTRAINT fk_items_seller
+                FOREIGN KEY (seller_id) REFERENCES olist_sellers(seller_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """,
     ),
@@ -175,7 +178,8 @@ TABLE_CONFIGS: Sequence[TableConfig] = (
             payment_type VARCHAR(50),
             payment_installments INT,
             payment_value DECIMAL(10, 2) NULL,
-            CONSTRAINT fk_payments_order FOREIGN KEY (order_id) REFERENCES olist_orders(order_id)
+            CONSTRAINT fk_payments_order
+                FOREIGN KEY (order_id) REFERENCES olist_orders(order_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """,
     ),
@@ -194,14 +198,17 @@ TABLE_CONFIGS: Sequence[TableConfig] = (
             review_creation_date DATETIME NULL,
             review_answer_timestamp DATETIME NULL,
             PRIMARY KEY (review_id, order_id),
-            CONSTRAINT fk_reviews_order FOREIGN KEY (order_id) REFERENCES olist_orders(order_id)
+            CONSTRAINT fk_reviews_order
+                FOREIGN KEY (order_id) REFERENCES olist_orders(order_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """,
     ),
 )
 
 
-def _dedupe(df: pd.DataFrame, pk_cols: list[str] | None, table_name: str) -> pd.DataFrame:
+def _dedupe(
+    df: pd.DataFrame, pk_cols: list[str] | None, table_name: str
+) -> pd.DataFrame:
     """Drop duplicate rows matching primary key columns."""
     if not pk_cols:
         return df
@@ -221,13 +228,23 @@ def _add_missing_categories(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
     """Add unmapped product categories so foreign key integrity never breaks."""
     if table_name == "product_category_name_translation":
         missing = pd.DataFrame([
-            {"product_category_name": "pc_gamer", "product_category_name_english": "pc_gamer"},
             {
-                "product_category_name": "portateis_cozinha_e_preparadores_de_alimentos",
-                "product_category_name_english": "kitchen_and_food_preparation_appliances",
+                "product_category_name": "pc_gamer",
+                "product_category_name_english": "pc_gamer",
+            },
+            {
+                "product_category_name": (
+                    "portateis_cozinha_e_preparadores_de_alimentos"
+                ),
+                "product_category_name_english": (
+                    "kitchen_and_food_preparation_appliances"
+                ),
             },
         ])
-        df = pd.concat([df, missing], ignore_index=True).drop_duplicates(subset=["product_category_name"])
+        df = (
+            pd.concat([df, missing], ignore_index=True)
+            .drop_duplicates(subset=["product_category_name"])
+        )
     return df
 
 
@@ -241,10 +258,20 @@ def _trim_category_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def _zero_pad_zip_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Pad postal code prefixes with leading zeros to maintain 5 digits."""
-    zip_cols = ("customer_zip_code_prefix", "seller_zip_code_prefix", "geolocation_zip_code_prefix")
+    zip_cols = (
+        "customer_zip_code_prefix",
+        "seller_zip_code_prefix",
+        "geolocation_zip_code_prefix",
+    )
     for col in zip_cols:
         if col in df.columns:
-            nums = pd.to_numeric(df[col], errors="coerce").dropna().astype("int64").astype(str).str.zfill(5)
+            nums = (
+                pd.to_numeric(df[col], errors="coerce")
+                .dropna()
+                .astype("int64")
+                .astype(str)
+                .str.zfill(5)
+            )
             df[col] = nums.reindex(df.index)
     return df
 
@@ -316,7 +343,9 @@ class MySQLExporter:
         """Fetch current row count for a given table."""
         try:
             with self.engine.connect() as conn:
-                return conn.execute(text(f"SELECT COUNT(*) FROM `{table_name}`")).scalar()
+                return conn.execute(
+                    text(f"SELECT COUNT(*) FROM `{table_name}`")
+                ).scalar()
         except SQLAlchemyError:
             return None
 
@@ -331,7 +360,11 @@ class MySQLExporter:
             if path.exists():
                 df_temp = pd.read_csv(str(path))
                 df_temp = _add_missing_categories(df_temp, cfg.table_name)
-                clean_temp = df_temp.drop_duplicates(subset=cfg.pk_cols) if cfg.pk_cols else df_temp
+                clean_temp = (
+                    df_temp.drop_duplicates(subset=cfg.pk_cols)
+                    if cfg.pk_cols
+                    else df_temp
+                )
                 csv_count = len(clean_temp)
             else:
                 csv_count = 0
@@ -384,7 +417,11 @@ class MySQLExporter:
         total_rows = len(df)
 
         if db_count is not None and db_count >= total_rows and not force:
-            logger.info("Table '%s' already contains %s records. Skipping.", config.table_name, f"{db_count:,}")
+            logger.info(
+                "Table '%s' already contains %s records. Skipping.",
+                config.table_name,
+                f"{db_count:,}",
+            )
             return True
 
         if db_count and db_count > 0:
@@ -405,7 +442,12 @@ class MySQLExporter:
         df = df.where(pd.notnull(df), None)
 
         num_chunks = (total_rows + chunksize - 1) // chunksize
-        logger.info("Importing %s rows into '%s' in %s chunk(s)...", f"{total_rows:,}", config.table_name, num_chunks)
+        logger.info(
+            "Importing %s rows into '%s' in %s chunk(s)...",
+            f"{total_rows:,}",
+            config.table_name,
+            num_chunks,
+        )
 
         try:
             with self.engine.begin() as conn:
@@ -422,7 +464,13 @@ class MySQLExporter:
                         )
                         current = min(i + chunksize, total_rows)
                         pct = (current / total_rows) * 100
-                        logger.info("  [%s] %s/%s rows (%.1f%%)", config.table_name, f"{current:,}", f"{total_rows:,}", pct)
+                        logger.info(
+                            "  [%s] %s/%s rows (%.1f%%)",
+                            config.table_name,
+                            f"{current:,}",
+                            f"{total_rows:,}",
+                            pct,
+                        )
                 finally:
                     conn.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
         except Exception as exc:
@@ -437,11 +485,34 @@ class MySQLExporter:
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="Export Olist E-commerce CSV datasets to MySQL.")
-    parser.add_argument("--table", "-t", help="Target specific table name or CSV to import.", default=None)
-    parser.add_argument("--force", "-f", help="Force truncate and re-import existing data.", action="store_true")
-    parser.add_argument("--status", "-s", help="Display dataset status table and exit.", action="store_true")
-    parser.add_argument("--chunksize", "-c", help="Batch size for bulk insertion (default: 5000).", type=int, default=5000)
+    parser = argparse.ArgumentParser(
+        description="Export Olist E-commerce CSV datasets to MySQL."
+    )
+    parser.add_argument(
+        "--table",
+        "-t",
+        help="Target specific table name or CSV to import.",
+        default=None,
+    )
+    parser.add_argument(
+        "--force",
+        "-f",
+        help="Force truncate and re-import existing data.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--status",
+        "-s",
+        help="Display dataset status table and exit.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--chunksize",
+        "-c",
+        help="Batch size for bulk insertion (default: 5000).",
+        type=int,
+        default=5000,
+    )
     return parser.parse_args()
 
 
@@ -467,7 +538,11 @@ def main() -> None:
     configs = TABLE_CONFIGS
     if args.table:
         target = args.table.lower().strip()
-        configs = [cfg for cfg in TABLE_CONFIGS if target in (cfg.table_name.lower(), cfg.csv_file.lower())]
+        configs = [
+            cfg
+            for cfg in TABLE_CONFIGS
+            if target in (cfg.table_name.lower(), cfg.csv_file.lower())
+        ]
         if not configs:
             logger.error("No dataset matches '--table %s'.", args.table)
             sys.exit(1)
