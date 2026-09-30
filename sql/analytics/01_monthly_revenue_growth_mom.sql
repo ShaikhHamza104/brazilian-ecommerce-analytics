@@ -3,6 +3,11 @@
 -- Purpose: Time-series revenue trends, MoM growth %, and cumulative GMV
 -- Author: Mohd Hamza Shaikh
 -- Domain: Financial & Sales Analytics
+--
+-- Data Boundary & Period Limitations:
+-- - Sparse Months: Sep 2016 (2 orders), Oct 2016 (290 orders), Dec 2016 (1 order), with Nov 2016 missing.
+-- - Incomplete Cutoff: Sep 2018 (1 non-canceled order) and Oct 2018 represent the end of the public sample.
+-- - Stable Operational Window: Jan 2017 to Aug 2018 (20 consecutive full operational months).
 -- =====================================================================
 
 WITH monthly_metrics AS (

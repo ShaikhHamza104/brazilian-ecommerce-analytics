@@ -27,11 +27,16 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "flake8>=7.0.0",
     "pytest>=9.1.1",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+markers = [
+    "db: tests that require a live MySQL database connection",
+]
+addopts = "-m 'not db'"
 
 [tool.pyright]
 extraPaths = ["."]

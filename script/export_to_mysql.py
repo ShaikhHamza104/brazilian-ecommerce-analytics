@@ -412,7 +412,7 @@ class MySQLExporter:
                 conn.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
                 try:
                     for i in range(0, total_rows, chunksize):
-                        chunk = df.iloc[i : i + chunksize]
+                        chunk = df.iloc[i:i + chunksize]
                         chunk.to_sql(
                             name=config.table_name,
                             con=conn,

@@ -5,8 +5,11 @@
 -- =====================================================================
 
 CREATE OR REPLACE VIEW vw_customer_rfm AS
-WITH dataset_max_date AS (
-    SELECT MAX(order_purchase_timestamp) AS max_date 
+WITH dataset_snapshot AS (
+    -- Fixed analysis snapshot date: max purchase timestamp in dataset (2018-10-17 17:30:18) + 1 day
+    -- Documented constant: '2018-10-18 17:30:18'
+    -- Anchoring to (max + 1 day) prevents shifting Recency values over time
+    SELECT DATE_ADD(MAX(order_purchase_timestamp), INTERVAL 1 DAY) AS snapshot_date 
     FROM olist_orders
 )
 SELECT
@@ -18,7 +21,7 @@ SELECT
     c.customer_state,
     
     -- Recency: Days between dataset snapshot date and customer's last purchase
-    DATEDIFF(dmd.max_date, MAX(o.order_purchase_timestamp)) AS recency_days,
+    DATEDIFF(snap.snapshot_date, MAX(o.order_purchase_timestamp)) AS recency_days,
     
     -- Frequency: Total distinct orders placed by this customer
     COUNT(DISTINCT o.order_id) AS frequency_orders,
@@ -45,7 +48,7 @@ SELECT
     END AS customer_loyalty_segment
 
 FROM olist_customers c
-CROSS JOIN dataset_max_date dmd
+CROSS JOIN dataset_snapshot snap
 INNER JOIN olist_orders o 
     ON c.customer_id = o.customer_id
 LEFT JOIN olist_order_items oi 
@@ -55,4 +58,4 @@ GROUP BY
     c.customer_unique_id,
     c.customer_city,
     c.customer_state,
-    dmd.max_date;
+    snap.snapshot_date;

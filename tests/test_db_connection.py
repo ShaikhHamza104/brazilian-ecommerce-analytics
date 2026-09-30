@@ -1,6 +1,8 @@
+import pytest
 from sqlalchemy import text
 
 
+@pytest.mark.db
 def test_database_connection(db_engine):
     """Verify that we can connect and ping MySQL."""
     with db_engine.connect() as conn:

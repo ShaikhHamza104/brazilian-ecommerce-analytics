@@ -4,6 +4,7 @@ from sqlalchemy import text
 
 from e_commerce_sales_analysis.db import load_table
 
+
 def test_empty_table_name():
     with pytest.raises(ValueError):
         load_table("")
@@ -14,6 +15,7 @@ def test_invalid_chunk_size():
         load_table("olist_customers", chunk_size=0)
 
 
+@pytest.mark.db
 def test_load_table_success():
     """Verify loading a small table returns a valid DataFrame."""
     df = load_table("product_category_name_translation")
@@ -21,6 +23,7 @@ def test_load_table_success():
     assert not df.empty
 
 
+@pytest.mark.db
 @pytest.mark.parametrize(
     "table_name",
     [

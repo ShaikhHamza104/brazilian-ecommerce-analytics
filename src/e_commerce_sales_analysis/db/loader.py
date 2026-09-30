@@ -2,7 +2,7 @@
 
 import re
 import pandas as pd
-from sqlalchemy import Engine,text
+from sqlalchemy import Engine, text
 
 from .connection import get_engine
 
