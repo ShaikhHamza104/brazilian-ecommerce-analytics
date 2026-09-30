@@ -4,6 +4,7 @@
 import pandas as pd
 from unidecode import unidecode
 
+
 def clean_city(column: pd.Series) -> pd.Series:
     """Clean and standardize Brazilian city names.
     - Replaces accented characters with ASCII equivalents (São Paulo -> Sao Paulo)

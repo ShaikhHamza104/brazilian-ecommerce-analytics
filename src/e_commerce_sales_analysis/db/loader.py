@@ -8,6 +8,7 @@ from .connection import get_engine
 
 _VALID_TABLE_REGEX = re.compile(r"^[a-zA-Z0-9_]+$")
 
+
 def load_table(
     table_name: str,
     chunk_size: int = 50_000,
